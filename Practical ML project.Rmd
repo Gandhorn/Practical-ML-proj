@@ -1,0 +1,100 @@
+---
+title: "Practical ML project"
+author: "n.a"
+date: "07/03/2021"
+output: html_document
+---
+
+## Executive summary
+Three different method were used to identify which activity was done based on sensors data: GBM, rain forest and neural network. GBM and random forest both gave very results with "just" a 3-fold cross validation method. Neural network had poor accuracy (approx. 40%).
+Eventually, the random forest method was chosen as it gave an accuracy of more than 99% on a dedicated test set.
+
+## Data loading / Pre-processing
+
+Data is loaded from the .csv files. Then some of the rows are transformed as they obviously contain factors.
+
+```{r}
+library(caret)
+set.seed(070321)
+
+training <- read.csv("pml-training.csv")
+testing <- read.csv("pml-testing.csv")
+
+training$user_name <- as.factor(training$user_name)
+training$classe <- as.factor(training$classe)
+testing$user_name <- as.factor(testing$user_name)
+```
+
+Some cleanup actions are conducted
+- First 7 columns are removed as they do not bring any added value to the model
+- Missing values are replaced by NA
+- #DIV/0! values are replaced by NA
+- Rows where values contain more than 10k NA are removed (technically, they contain only NA)
+
+```{r}
+training <- training[,8:160]
+
+training[training == ""] <- NA
+training[training == "#DIV/0!"] <- NA
+
+training <- training[,lapply(training,function(x) sum(is.na(x))) < 10000]
+```
+
+Then, subset is create to have my own training / test set (as the test set provided does not include any results to be compared with). I chose to have 80% of the data in my training, the rest in the test
+
+```{r}
+inTrain <- createDataPartition(y = training$classe, p = 0.8, list = FALSE)
+myTraining <- training[inTrain,]
+myTesting <- training[-inTrain,]
+```
+
+## Classification
+
+For the classification, I tried 3 classical appraoachs: Generalized Boosted Regression, Random Forest and. All of these three can be supported by the train function of the caret package which make their implementation easy. 
+
+### Transverse settings
+
+Choice was made to use 3-fold cross validation to get good results while still having good performance. This will be used on all trainings
+
+```{r}
+ctrl <- trainControl(method="cv", number=3, verbose = FALSE)
+```
+
+
+### GBM
+
+GBM approach is first used:
+```{r, cache=TRUE}
+fit_gbm <- train(classe ~., method = "gbm", data = myTraining, trControl = ctrl)
+confusionMatrix(predict(fit_gbm, myTesting), myTesting$class)
+```
+As one can see, results is an accuracy of more than 96% which first seems to be good.
+
+### Random forest approach
+
+Random forest approach is applied using the exact same parameters
+```{r, cache=TRUE}
+fit_rf <- train(classe ~., method = "rf", data = myTraining, trControl = ctrl)
+confusionMatrix(predict(fit_rf, myTesting), myTesting$class)
+```
+Accuracy is exceptionaly high, more than 99%.
+
+
+### Neural network approach
+
+Finally, the neural network approach was used to see its results (curiosity):
+```{r, cache=TRUE}
+fit_nnet <- train(classe ~., method = "nnet", data = myTraining, trControl = ctrl)
+confusionMatrix(predict(fit_nnet, myTesting), myTesting$class)
+```
+Compared to the two other approach, result is very deceiving.
+
+
+## Classification for test
+
+The random forest algorithm gave so good results that it will be used to estimate the results on the real Test set.
+
+```{r, cache=TRUE}
+predict(fit_rf, testing)
+```
+
